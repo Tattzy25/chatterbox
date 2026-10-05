@@ -292,11 +292,15 @@ async function handleChatSession({
  * @param {string} shopOrigin - Origin of the installed shop making the request
  * @returns {Object} CORS headers object
  */
-    "Access-Control-Allow-Origin": "*",
+function getCorsHeaders(request, shopOrigin) {
+  const requestHeaders = request.headers.get("Access-Control-Request-Headers") || "Content-Type, Accept";
+
+  return {
+    "Access-Control-Allow-Origin": shopOrigin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": requestHeaders,
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Max-Age": "86400" // 24 hours
+    "Access-Control-Max-Age": "86400"
   };
 }
 
@@ -305,7 +309,13 @@ async function handleChatSession({
  * @param {string} shopOrigin - Origin of the installed shop making the request
  * @returns {Object} SSE headers object
  */
-    "Access-Control-Allow-Origin": "*",
+function getSseHeaders(shopOrigin) {
+  return {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Origin": shopOrigin,
     "Access-Control-Allow-Methods": "GET,OPTIONS,POST",
     "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
   };
