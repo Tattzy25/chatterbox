@@ -4,7 +4,6 @@
  */
 import MCPClient from "../mcp-client";
 import { saveMessage, getConversationHistory, resolveConversationId } from "../db.server";
-import { resolveInstalledShopOrigin } from "../services/shop-origin.server";
 import { getCustomerAccountUrls } from "../services/customer-account.server";
 import AppConfig from "../services/config.server";
 import { createSseStream } from "../services/streaming.server";
@@ -16,9 +15,6 @@ import { createToolService } from "../services/tool.server";
  * Rract Router loader function for handling GET requests
  */
 export async function loader({ request }) {
-  // REMOVED: const shopOrigin = await resolveInstalledShopOrigin(request);
-  // REMOVED: if (!shopOrigin) return forbidden();
-
   // Handle OPTIONS requests (CORS preflight)
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -47,14 +43,7 @@ export async function loader({ request }) {
  * React Router action function for handling POST requests
  */
 export async function action({ request }) {
-  // REMOVED: const shopOrigin = await resolveInstalledShopOrigin(request);
-  // REMOVED: if (!shopOrigin) return forbidden();
-
   return handleChatRequest(request, null);
-}
-
-function forbidden() {
-  return new Response(JSON.stringify({ error: AppConfig.errorMessages.unknownShop }), { status: 403 });
 }
 
 /**
