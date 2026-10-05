@@ -19,7 +19,7 @@ export async function loader({ request }) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: getCorsHeaders(request, null)
+      headers: getCorsHeaders(request)
     });
   }
 
@@ -27,23 +27,31 @@ export async function loader({ request }) {
 
   // Handle history fetch requests - matches /chat?history=true&conversation_id=XYZ
   if (url.searchParams.has('history') && url.searchParams.has('conversation_id')) {
-    return handleHistoryRequest(request, null, url.searchParams.get('conversation_id'));
+    return handleHistoryRequest(request, url.searchParams.get('conversation_id'));
   }
 
   // Handle SSE requests
   if (!url.searchParams.has('history') && request.headers.get("Accept") === "text/event-stream") {
-    return handleChatRequest(request, null);
+    return handleChatRequest(request);
   }
 
   // API-only: reject all other requests
-  return new Response(JSON.stringify({ error: AppConfig.errorMessages.apiUnsupported }), { status: 400, headers: getCorsHeaders(request, null) });
+  return new Response(JSON.stringify({ error: AppConfig.errorMessages.apiUnsupported }), { status: 400, headers: getCorsHeaders(request) });
 }
 
 /**
  * React Router action function for handling POST requests
  */
 export async function action({ request }) {
-  return handleChatRequest(request, null);
+  // Handle OPTIONS requests (CORS preflight)
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: getCorsHeaders(request)
+    });
+  }
+
+  return handleChatRequest(request);
 }
 
 /**
@@ -52,10 +60,10 @@ export async function action({ request }) {
  * @param {string} conversationId - The conversation ID
  * @returns {Response} JSON response with chat history
  */
-async function handleHistoryRequest(request, shopOrigin, conversationId) {
+async function handleHistoryRequest(request, conversationId) {
   const messages = await getConversationHistory(conversationId);
 
-  return new Response(JSON.stringify({ messages }), { headers: getCorsHeaders(request, shopOrigin) });
+  return new Response(JSON.stringify({ messages }), { headers: getCorsHeaders(request) });
 }
 
 /**
@@ -63,7 +71,7 @@ async function handleHistoryRequest(request, shopOrigin, conversationId) {
  * @param {Request} request - The request object
  * @returns {Response} Server-sent events stream
  */
-async function handleChatRequest(request, shopOrigin) {
+async function handleChatRequest(request) {
   try {
     // Get message data from request body
     const body = await request.json();
@@ -73,7 +81,7 @@ async function handleChatRequest(request, shopOrigin) {
     if (!userMessage) {
       return new Response(
         JSON.stringify({ error: AppConfig.errorMessages.missingMessage }),
-        { status: 400, headers: getSseHeaders(null) }
+        { status: 400, headers: getCorsHeaders(request) }
       );
     }
 
@@ -93,13 +101,13 @@ async function handleChatRequest(request, shopOrigin) {
     });
 
     return new Response(responseStream, {
-      headers: getSseHeaders(shopOrigin)
+      headers: getSseHeaders(request)
     });
   } catch (error) {
     console.error('Error in chat request handler:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: getCorsHeaders(request, shopOrigin)
+      headers: getCorsHeaders(request)
     });
   }
 }
@@ -278,14 +286,13 @@ async function handleChatSession({
 /**
  * Gets CORS headers for the response
  * @param {Request} request - The request object
- * @param {string} shopOrigin - Origin of the installed shop making the request
  * @returns {Object} CORS headers object
  */
-function getCorsHeaders(request, shopOrigin) {
+function getCorsHeaders(request) {
   const requestHeaders = request.headers.get("Access-Control-Request-Headers") || "Content-Type, Accept";
 
   return {
-    "Access-Control-Allow-Origin": shopOrigin,
+    ...getOriginHeaders(request),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": requestHeaders,
     "Access-Control-Allow-Credentials": "true",
@@ -295,17 +302,74 @@ function getCorsHeaders(request, shopOrigin) {
 
 /**
  * Get SSE headers for the response
- * @param {string} shopOrigin - Origin of the installed shop making the request
+ * @param {Request} request - The request object
  * @returns {Object} SSE headers object
  */
-function getSseHeaders(shopOrigin) {
+function getSseHeaders(request) {
   return {
+    ...getOriginHeaders(request),
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Origin": shopOrigin,
     "Access-Control-Allow-Methods": "GET,OPTIONS,POST",
     "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
   };
+}
+
+/**
+ * Build the origin-specific CORS headers. The requesting origin is only echoed
+ * back when it is allowed; otherwise no Access-Control-Allow-Origin is set.
+ * Vary: Origin is always set so caches key responses per origin.
+ * @param {Request} request - The request object
+ * @returns {Object} Origin-related headers
+ */
+function getOriginHeaders(request) {
+  const headers = { "Vary": "Origin" };
+  const origin = getAllowedOrigin(request);
+
+  if (origin) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  }
+
+  return headers;
+}
+
+/**
+ * Determine whether the request's Origin header is allowed.
+ * Allowed: https://*.myshopify.com, localhost / 127.0.0.1 (development),
+ * and any origin listed in the comma-separated ALLOWED_ORIGINS env var.
+ * @param {Request} request - The request object
+ * @returns {string|null} The origin to echo back, or null if not allowed
+ */
+function getAllowedOrigin(request) {
+  const origin = request.headers.get("Origin");
+  if (!origin) return null;
+
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return null;
+  }
+
+  // Origins never carry a path, so require an exact match with the parsed origin
+  if (parsed.origin !== origin) return null;
+
+  const hostname = parsed.hostname;
+
+  if (parsed.protocol === "https:" && hostname.endsWith(".myshopify.com")) {
+    return origin;
+  }
+
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return origin;
+  }
+
+  const extraOrigins = (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return extraOrigins.includes(origin) ? origin : null;
 }
