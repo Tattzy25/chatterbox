@@ -92,7 +92,7 @@ async function handleChatRequest(request) {
 
     // Resolve the shop origin from the request; null when it cannot be resolved
     const shopOrigin = (await resolveInstalledShopOrigin(request)) ?? null;
-
+    
     // Create a stream for the response
     const responseStream = createSseStream(async (stream) => {
       await handleChatSession({
