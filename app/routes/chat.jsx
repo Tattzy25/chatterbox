@@ -9,6 +9,7 @@ import AppConfig from "../services/config.server";
 import { createSseStream } from "../services/streaming.server";
 import { createClaudeService } from "../services/claude.server";
 import { createToolService } from "../services/tool.server";
+import { resolveInstalledShopOrigin } from "../services/shop-origin.server";
 
 
 /**
@@ -89,10 +90,13 @@ async function handleChatRequest(request) {
     const conversationId = await resolveConversationId(body.conversation_id);
     const promptType = body.prompt_type || AppConfig.api.defaultPromptType;
 
+    // Resolve the shop origin from the request; null when it cannot be resolved
+    const shopOrigin = (await resolveInstalledShopOrigin(request)) ?? null;
+
     // Create a stream for the response
     const responseStream = createSseStream(async (stream) => {
       await handleChatSession({
-        shopOrigin: null,
+        shopOrigin,
         userMessage,
         conversationId,
         promptType,
