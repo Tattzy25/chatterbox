@@ -16,14 +16,14 @@ import { createToolService } from "../services/tool.server";
  * Rract Router loader function for handling GET requests
  */
 export async function loader({ request }) {
-  const shopOrigin = await resolveInstalledShopOrigin(request);
-  if (!shopOrigin) return forbidden();
+  // REMOVED: const shopOrigin = await resolveInstalledShopOrigin(request);
+  // REMOVED: if (!shopOrigin) return forbidden();
 
   // Handle OPTIONS requests (CORS preflight)
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: getCorsHeaders(request, shopOrigin)
+      headers: getCorsHeaders(request, null)
     });
   }
 
@@ -31,26 +31,26 @@ export async function loader({ request }) {
 
   // Handle history fetch requests - matches /chat?history=true&conversation_id=XYZ
   if (url.searchParams.has('history') && url.searchParams.has('conversation_id')) {
-    return handleHistoryRequest(request, shopOrigin, url.searchParams.get('conversation_id'));
+    return handleHistoryRequest(request, null, url.searchParams.get('conversation_id'));
   }
 
   // Handle SSE requests
   if (!url.searchParams.has('history') && request.headers.get("Accept") === "text/event-stream") {
-    return handleChatRequest(request, shopOrigin);
+    return handleChatRequest(request, null);
   }
 
   // API-only: reject all other requests
-  return new Response(JSON.stringify({ error: AppConfig.errorMessages.apiUnsupported }), { status: 400, headers: getCorsHeaders(request, shopOrigin) });
+  return new Response(JSON.stringify({ error: AppConfig.errorMessages.apiUnsupported }), { status: 400, headers: getCorsHeaders(request, null) });
 }
 
 /**
  * React Router action function for handling POST requests
  */
 export async function action({ request }) {
-  const shopOrigin = await resolveInstalledShopOrigin(request);
-  if (!shopOrigin) return forbidden();
+  // REMOVED: const shopOrigin = await resolveInstalledShopOrigin(request);
+  // REMOVED: if (!shopOrigin) return forbidden();
 
-  return handleChatRequest(request, shopOrigin);
+  return handleChatRequest(request, null);
 }
 
 function forbidden() {
@@ -84,7 +84,7 @@ async function handleChatRequest(request, shopOrigin) {
     if (!userMessage) {
       return new Response(
         JSON.stringify({ error: AppConfig.errorMessages.missingMessage }),
-        { status: 400, headers: getSseHeaders(shopOrigin) }
+        { status: 400, headers: getSseHeaders(null) }
       );
     }
 
@@ -95,7 +95,7 @@ async function handleChatRequest(request, shopOrigin) {
     // Create a stream for the response
     const responseStream = createSseStream(async (stream) => {
       await handleChatSession({
-        shopOrigin,
+        shopOrigin: null,
         userMessage,
         conversationId,
         promptType,
@@ -292,11 +292,7 @@ async function handleChatSession({
  * @param {string} shopOrigin - Origin of the installed shop making the request
  * @returns {Object} CORS headers object
  */
-function getCorsHeaders(request, shopOrigin) {
-  const requestHeaders = request.headers.get("Access-Control-Request-Headers") || "Content-Type, Accept";
-
-  return {
-    "Access-Control-Allow-Origin": shopOrigin,
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": requestHeaders,
     "Access-Control-Allow-Credentials": "true",
@@ -309,13 +305,7 @@ function getCorsHeaders(request, shopOrigin) {
  * @param {string} shopOrigin - Origin of the installed shop making the request
  * @returns {Object} SSE headers object
  */
-function getSseHeaders(shopOrigin) {
-  return {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Origin": shopOrigin,
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,OPTIONS,POST",
     "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
   };

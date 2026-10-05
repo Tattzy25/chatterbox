@@ -19,8 +19,7 @@ export async function resolveInstalledShopOrigin(request) {
 
   if (url.protocol !== "https:") return null;
 
-  const session = await prisma.session.findFirst({ where: { shop: url.hostname } });
-  return session ? url.origin : null;
+  return url.origin;
 }
 
 export function isShopifyUrl(value) {
